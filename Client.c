@@ -46,7 +46,7 @@ void checkInput(char* ip, char* port, char* name)
 	}
 	//store port if valid
 	else
-		server.sin_port = htons(atoi(port));
+		server.sin_port = ntohs(atoi(port));
 
 	//checks if username contains alphanum signs only
 	for (i = 0; i < strlen(name); i++)
@@ -66,14 +66,14 @@ void checkInput(char* ip, char* port, char* name)
 
 void receive()
 {
-	char* serverMessage = (char*) malloc(512);
+	char* serverMessage = (char*) malloc(128);
 	uint8_t identifyer, size;
 
 	while (1)
 	{
-		size = recvfrom(fd, serverMessage, sizeof(serverMessage), 0,
+		size = recvfrom(fd, serverMessage, 128, 0,
 				(struct sockaddr*) &server, &ssLength);
-		printf("serverMessage: %s", serverMessage);
+
 
 		if (size == 0)
 			printf("No characters were received...");
@@ -81,7 +81,8 @@ void receive()
 		{
 			memcpy(&identifyer, serverMessage, sizeof(uint8_t));
 			serverMessage += sizeof(uint8_t);
-			printf("identifyer: %d", identifyer);
+
+			printf("Identifyer: %u \n", identifyer);
 			switch (identifyer)
 			{
 			case SV_CON_REP:
@@ -233,28 +234,36 @@ int main(int argc, char** argv)
 	char* clientMessage = malloc(
 			sizeof(uint8_t) + sizeof(uint16_t) + strlen(userName)*sizeof(char));
 
-	//To be overdone
-	memcpy(clientMessage, &conreq, sizeof(uint8_t));
-	clientMessage += sizeof(uint8_t);
+	clientMessage[0] = 0x01;
+	//clientMessage += sizeof(uint8_t);
 
-	uint16_t length = htons(strlen(userName));
-	memcpy(clientMessage, &length, sizeof(uint16_t));
-	clientMessage += sizeof(uint16_t);
+	uint16_t length = strlen(userName)*sizeof(char);
+	length = htons(length);
+	printf("Length: %d",  htons(length));
+	memcpy(clientMessage+1, &length, sizeof(uint16_t));
+	printf("länge msg: %d\n", strlen(clientMessage));
 
-	memcpy(clientMessage, userName, strlen(userName));
-	clientMessage -=3;
+
+	//clientMessage += sizeof(uint16_t);
+	//clientMessage -= sizeof(uint8_t) + sizeof(uint16_t);
+	memcpy(clientMessage+3, userName, strlen(userName));
+
+
+	printf("länge msg: %d\n", strlen(clientMessage));
+	int i;
+	for(i = 0; i < strlen(clientMessage); i++)
+	{
+		printf("%d: %u\n",i, clientMessage[i]);
+	}
 
 	int tries, characters;
-
-	printf("ServerIp: %s, ServerPort: %d",inet_ntoa(server.sin_addr), ntohs(server.sin_port));
-	printf("\n\nVerbinde als %s zu Server %s auf Port %s\n\n", userName,
-			serverIp, serverPort);
-	pthread_create(&receiver, NULL, (void*) &receive, NULL);
+	//pthread_create(&receiver, NULL, (void*) &receive, NULL);
 
 	for (tries = 0; tries <= 3; tries++)
 	{
-		characters = sendto(fd, clientMessage, sizeof(clientMessage), 0,
+		characters = sendto(fd, clientMessage, sizeof(clientMessage)*sizeof(char), 0,
 				(struct sockaddr*) &server, sizeof(struct sockaddr_in));
+		sleep(1);
 		if (characters == -1)
 		{
 			printf("Something went wrong while connecting... retrying");
