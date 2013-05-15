@@ -76,117 +76,122 @@ void receive()
 
 		if (size == 0)
 			printf("No characters were received...");
-		memcpy(&identifyer, serverMessage, sizeof(uint8_t));
-		serverMessage += sizeof(uint8_t);
-
-		switch (identifyer)
+		else
 		{
-		case CL_CON_REQ:
-		{
-			//check if server accepted or not...
-			uint8_t tmp;
-			memcpy(&tmp, serverMessage, sizeof(uint8_t));
+			memcpy(&identifyer, serverMessage, sizeof(uint8_t));
+			serverMessage += sizeof(uint8_t);
 
-			if (tmp == 0)
+			switch (identifyer)
 			{
-				uint16_t tmpPort;
-				serverMessage += sizeof(uint8_t);
-				memcpy(&tmpPort, serverMessage, sizeof(uint16_t));
-				server.sin_port = ntohs(tmpPort);
-				printf("Connection established! New Port is %d", tmpPort);
+			case CL_CON_REQ:
+			{
+				//check if server accepted or not...
+				uint8_t tmp;
+				memcpy(&tmp, serverMessage, sizeof(uint8_t));
+
+				if (tmp == 0)
+				{
+					uint16_t tmpPort;
+					serverMessage += sizeof(uint8_t);
+					memcpy(&tmpPort, serverMessage, sizeof(uint16_t));
+					server.sin_port = ntohs(tmpPort);
+					printf("Connection established! New Port is %d", tmpPort);
+				}
+				if (tmp == 1)
+				{
+					printf("Connection rejected...");
+					exit(1);
+				}
+				break;
 			}
-			if (tmp == 1)
+
+			case SV_CON_AMSG:
 			{
-				printf("Connection rejected...");
+				uint16_t userNameLength;
+
+				//print name of newly connected user
+				memcpy(&userNameLength, serverMessage, sizeof(uint16_t));
+				userNameLength = ntohs(userNameLength);
+				serverMessage += sizeof(uint16_t);
+
+				char* newUser = (char*) malloc(userNameLength * sizeof(char));
+
+				memcpy(newUser, serverMessage, userNameLength);
+				printf("%s has entered the Chat.", newUser);
+				free(newUser);
+				break;
+			}
+
+			case SV_AMSG:
+			{
+				uint16_t userNameLength;
+				uint32_t messageLength;
+				char* userName;
+				char* message;
+
+				memcpy(&userNameLength, serverMessage, sizeof(uint16_t));
+				serverMessage += sizeof(uint16_t);
+				userNameLength = ntohs(userNameLength);
+				userName = (char*) malloc(userNameLength * sizeof(char));
+
+				memcpy(userName, serverMessage, sizeof(userNameLength));
+				serverMessage += sizeof(userNameLength);
+
+				memcpy(&messageLength, serverMessage, sizeof(uint32_t));
+				messageLength = ntohl(messageLength);
+				serverMessage += sizeof(uint32_t);
+				message = (char*) malloc(messageLength * sizeof(char));
+
+				printf("<%s>: %s", userName, message);
+				free(userName);
+				free(message);
+				break;
+			}
+
+			case SV_DISC_REP:
+			{
+				printf("Verbindung erfolgreich beendet\n");
 				exit(1);
+				break;
 			}
-			break;
-		}
 
-		case SV_CON_AMSG:
-		{
-			uint16_t userNameLength;
+			case SV_DISC_AMSG:
+			{
+				uint16_t userNameLength;
 
-			//print name of newly connected user
-			memcpy(&userNameLength, serverMessage, sizeof(uint16_t));
-			userNameLength = ntohs(userNameLength);
-			serverMessage += sizeof(uint16_t);
+				//print name of newly connected user
+				memcpy(&userNameLength, serverMessage, sizeof(uint16_t));
+				userNameLength = ntohs(userNameLength);
+				serverMessage += sizeof(uint16_t);
 
-			char* newUser = (char*) malloc(userNameLength*sizeof(char));
+				char* newUser = (char*) malloc(userNameLength * sizeof(char));
 
-			memcpy(newUser, serverMessage, userNameLength);
-			printf("%s has entered the Chat.", newUser);
-			free(newUser);
-			break;
-		}
+				memcpy(newUser, serverMessage, userNameLength);
+				printf("%s has disconnected from Chat.", newUser);
+				free(newUser);
+				break;
+			}
 
-		case SV_AMSG:
-		{
-			uint16_t userNameLength; uint32_t messageLength;
-			char* userName; char* message;
+			case SV_PING_REQ:
+			{
+				break;
+			}
 
-			memcpy(&userNameLength, serverMessage, sizeof(uint16_t));
-			serverMessage += sizeof(uint16_t);
-			userNameLength = ntohs(userNameLength);
-			userName = (char*) malloc(userNameLength*sizeof(char));
+			case SV_MSG:
+			{
+				uint32_t messageLength;
 
-			memcpy(userName, serverMessage, sizeof(userNameLength));
-			serverMessage += sizeof(userNameLength);
+				memcpy(&messageLength, serverMessage, sizeof(uint32_t));
+				messageLength = ntohl(messageLength);
 
-			memcpy(&messageLength, serverMessage, sizeof(uint32_t));
-			messageLength = ntohl(messageLength);
-			serverMessage += sizeof(uint32_t);
-			message = (char*) malloc(messageLength*sizeof(char));
+				char* message = (char*) malloc(messageLength * sizeof(char));
+				memcpy(message, serverMessage, messageLength);
 
-			printf("<%s>: %s", userName, message);
-			free(userName);
-			free(message);
-			break;
-		}
-
-		case SV_DISC_REP:
-		{
-			printf("Verbindung erfolgreich beendet\n");
-			exit(1);
-			break;
-		}
-
-		case SV_DISC_AMSG:
-		{
-			uint16_t userNameLength;
-
-			//print name of newly connected user
-			memcpy(&userNameLength, serverMessage, sizeof(uint16_t));
-			userNameLength = ntohs(userNameLength);
-			serverMessage += sizeof(uint16_t);
-
-			char* newUser = (char*) malloc(userNameLength*sizeof(char));
-
-			memcpy(newUser, serverMessage, userNameLength);
-			printf("%s has disconnected from Chat.", newUser);
-			free(newUser);
-			break;
-		}
-
-		case SV_PING_REQ:
-		{
-			break;
-		}
-
-		case SV_MSG:
-		{
-			uint32_t messageLength;
-
-			memcpy(&messageLength, serverMessage, sizeof(uint32_t));
-			messageLength = ntohl(messageLength);
-
-			char* message = (char*) malloc(messageLength*sizeof(char));
-			memcpy(message, serverMessage, messageLength);
-
-			printf("#server#: %s \n", message);
-			free(message);
-			break;
-		}
+				printf("#server#: %s \n", message);
+				free(message);
+				break;
+			}
+			}
 		}
 	}
 }
@@ -226,7 +231,8 @@ int main(int argc, char** argv)
 	}
 	checkInput(serverIp, serverPort, userName);
 
-	char* clientMessage = malloc(sizeof(uint8_t) + sizeof(uint16_t) + strlen(userName));
+	char* clientMessage = malloc(
+			sizeof(uint8_t) + sizeof(uint16_t) + strlen(userName));
 
 	//To be overdone
 	memcpy(clientMessage, &conreq, sizeof(uint8_t));
@@ -258,7 +264,6 @@ int main(int argc, char** argv)
 		{
 			printf("Signs sent: %d", characters);
 		}
-		while(1){}
 
 		//Todo. Receive clientMessages...
 	}
