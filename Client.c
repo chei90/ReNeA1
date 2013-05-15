@@ -73,6 +73,7 @@ void receive()
 	{
 		size = recvfrom(fd, serverMessage, sizeof(serverMessage), 0,
 				(struct sockaddr*) &server, &ssLength);
+		printf("serverMessage: %s", serverMessage);
 
 		if (size == 0)
 			printf("No characters were received...");
@@ -80,15 +81,14 @@ void receive()
 		{
 			memcpy(&identifyer, serverMessage, sizeof(uint8_t));
 			serverMessage += sizeof(uint8_t);
-
+			printf("identifyer: %d", identifyer);
 			switch (identifyer)
 			{
-			case CL_CON_REQ:
+			case SV_CON_REP:
 			{
 				//check if server accepted or not...
 				uint8_t tmp;
 				memcpy(&tmp, serverMessage, sizeof(uint8_t));
-
 				if (tmp == 0)
 				{
 					uint16_t tmpPort;
@@ -202,7 +202,6 @@ int main(int argc, char** argv)
 		printUsage();
 
 	int opt;
-	extern char* optarg;
 	char* serverIp;
 	char* serverPort;
 	char* userName;
@@ -232,7 +231,7 @@ int main(int argc, char** argv)
 	checkInput(serverIp, serverPort, userName);
 
 	char* clientMessage = malloc(
-			sizeof(uint8_t) + sizeof(uint16_t) + strlen(userName));
+			sizeof(uint8_t) + sizeof(uint16_t) + strlen(userName)*sizeof(char));
 
 	//To be overdone
 	memcpy(clientMessage, &conreq, sizeof(uint8_t));
@@ -243,13 +242,14 @@ int main(int argc, char** argv)
 	clientMessage += sizeof(uint16_t);
 
 	memcpy(clientMessage, userName, strlen(userName));
-	clientMessage += sizeof(strlen(userName));
+	clientMessage -=3;
 
 	int tries, characters;
 
+	printf("ServerIp: %s, ServerPort: %d",inet_ntoa(server.sin_addr), ntohs(server.sin_port));
 	printf("\n\nVerbinde als %s zu Server %s auf Port %s\n\n", userName,
 			serverIp, serverPort);
-	//pthread_create(&receiver, NULL, (void*) &receive, NULL);
+	pthread_create(&receiver, NULL, (void*) &receive, NULL);
 
 	for (tries = 0; tries <= 3; tries++)
 	{
@@ -264,7 +264,6 @@ int main(int argc, char** argv)
 		{
 			printf("Signs sent: %d", characters);
 		}
-		printf("l");
 		sleep(5);
 		//Todo. Receive clientMessages...
 	}
