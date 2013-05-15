@@ -258,6 +258,7 @@ int main(int argc, char** argv)
 		{
 			printf("Signs sent: %d", characters);
 		}
+		while(1){}
 
 		//Todo. Receive clientMessages...
 	}
