@@ -249,7 +249,7 @@ int main(int argc, char** argv)
 
 	printf("\n\nVerbinde als %s zu Server %s auf Port %s\n\n", userName,
 			serverIp, serverPort);
-	pthread_create(&receiver, NULL, (void*) &receive, NULL);
+	//pthread_create(&receiver, NULL, (void*) &receive, NULL);
 
 	for (tries = 0; tries <= 3; tries++)
 	{
@@ -264,7 +264,8 @@ int main(int argc, char** argv)
 		{
 			printf("Signs sent: %d", characters);
 		}
-
+		printf("l");
+		sleep(5);
 		//Todo. Receive clientMessages...
 	}
 	return 1;
