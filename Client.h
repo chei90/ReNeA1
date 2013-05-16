@@ -20,9 +20,12 @@
 #include<arpa/inet.h>
 #include"Identifyers.h"
 #include<pthread.h>
+#include"unp_readline.c"
+#include<errno.h>
 
 	struct sockaddr_in server;
 	int fd;
 	socklen_t ssLength;
-	pthread_t receiver;
+	pthread_t listener;
+
 #endif
