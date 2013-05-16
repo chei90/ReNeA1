@@ -19,13 +19,15 @@
 #include<sys/types.h>
 #include<arpa/inet.h>
 #include"Identifyers.h"
-#include<pthread.h>
 #include"unp_readline.c"
 #include<errno.h>
+#include<sys/select.h>
+#include<sys/time.h>
 
 	struct sockaddr_in server;
 	int fd;
 	socklen_t ssLength;
 	pthread_t listener;
+	fd_set fds;
 
 #endif

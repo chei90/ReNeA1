@@ -63,134 +63,6 @@ void checkInput(char* ip, char* port, char* name)
 
 	server.sin_family = AF_INET;
 }
-/*
- void receive()
- {
- char* serverMessage = (char*) malloc(128);
- uint8_t identifyer;
- int size;
-
- size = recvfrom(fd, serverMessage, 100, 0, (struct sockaddr*) &server, &ssLength);
- printf("\nPort normal:%d htons %d ntohs %d\n", server.sin_port, htons(server.sin_port), ntohs(server.sin_port));
-
- printf("\nSize: %d\n", size);
- memcpy(&identifyer, serverMessage, sizeof(uint8_t));
- fflush(stdout);
- while (1)
- {
-
- size = recvfrom(fd, serverMessage, 128, 0, (struct sockaddr*) &server, &ssLength);
- if (size == -1 || size == 0)
- //printf("No characters were received...");
- break;
- else
- {
- printf("Characters received! %d ", size);
- break;
- fflush(stdin);
- memcpy(&identifyer, serverMessage, sizeof(uint8_t));
- if(identifyer)printf("Identifyer is: %u\n",identifyer);
- //serverMessage += sizeof(uint8_t);
-
- switch (identifyer)
- {
- /*case SV_CON_REP:
- {
- //check if server accepted or not...
- printf("Juhu!");
- uint8_t tmp;
- memcpy(&tmp, serverMessage, sizeof(uint8_t));
- if (tmp == 0)
- {
- uint16_t tmpPort;
- serverMessage += sizeof(uint8_t);
- memcpy(&tmpPort, serverMessage, sizeof(uint16_t));
- server.sin_port = ntohs(tmpPort);
- printf("Connection established! New Port is %d", tmpPort);
- }
- if (tmp == 1)
- {
- printf("Connection rejected...");
- exit(1);
- }
- break;
- }
-
- case SV_CON_AMSG:
- {
- uint16_t userNameLength;
-
- //print name of newly connected user
- memcpy(&userNameLength, serverMessage, sizeof(uint16_t));
- userNameLength = ntohs(userNameLength);
- serverMessage += sizeof(uint16_t);
-
- char* newUser = (char*) malloc(userNameLength * sizeof(char));
-
- memcpy(newUser, serverMessage, userNameLength);
- printf("%s has entered the Chat.", newUser);
- free(newUser);
- break;
- }
-
-
- case SV_DISC_REP:
- {
- printf("Verbindung erfolgreich beendet\n");
- exit(1);
- break;
- }
-
- case SV_DISC_AMSG:
- {
- uint16_t userNameLength;
-
- //print name of newly connected user
- memcpy(&userNameLength, serverMessage, sizeof(uint16_t));
- userNameLength = ntohs(userNameLength);
- serverMessage += sizeof(uint16_t);
-
- char* newUser = (char*) malloc(userNameLength * sizeof(char));
-
- memcpy(newUser, serverMessage, userNameLength);
- printf("%s has disconnected from Chat.", newUser);
- free(newUser);
- break;
- }
-
- case SV_PING_REQ:
- {
- break;
- }
-
- }
- }
- }
- }*/
-void inputHandler()
-{
-	while (1)
-	{
-		char* inputBuffer = malloc(1019 * sizeof(char));
-
-		int size = readline(0, inputBuffer, 1019);
-		if (size > 0)
-		{
-			printf("CharPointer hat die Länge: %d und %s \n", size, inputBuffer);
-			sendInformation(inputBuffer);
-
-		}
-	}
-}
-
-void sendInformation(char* input)
-{
-	int characters = sendto(fd, input,strlen(input) * sizeof(char)*10+100, 0,
-					 &server, sizeof(struct sockaddr_in));
-
-	printf("Sent [%d] signs.\n", characters);
-	printf( "Error in transmitting: %s\n", strerror( errno ) );
-}
 
 int main(int argc, char** argv)
 {
@@ -225,7 +97,6 @@ int main(int argc, char** argv)
 		exit(1);
 	}
 	checkInput(serverIp, serverPort, userName);
-
 	char* clientMessage = malloc(
 			sizeof(uint8_t) + sizeof(uint16_t)
 					+ strlen(userName) * sizeof(char));
@@ -282,89 +153,192 @@ int main(int argc, char** argv)
 			}
 		}
 	}
+
+	struct timeval timeout;
+
 	printf("Connected Successfully...\n");
-	pthread_create(&listener, NULL, (void*) &inputHandler, NULL);
+
 	while (1)
 	{
-
-		char* serverMessage = malloc(128);
-		int size = recvfrom(fd, serverMessage, 128, 0,
-				(struct sockaddr*) &server, &ssLength);
-
-		if (size == -1)
+		timeout.tv_sec = 1;
+		timeout.tv_usec = 0;
+		FD_ZERO(&fds);
+		FD_SET(fd, &fds);
+		FD_SET(0, &fds);
+		if (select(fd + 1, &fds, 0, 0, 0) < 0)
 		{
-			printf("Error at receiving!\n");
+			printf("Error at selection FD\n");
 			exit(1);
 		}
-		if (size == 0)
+
+		if (FD_ISSET(fd, &fds))
 		{
-			printf("No signs received!\n");
-		}
+			char* serverMessage = malloc(1024);
+			int size = recvfrom(fd, serverMessage, 128, 0,
+					(struct sockaddr*) &server, &ssLength);
 
-		uint8_t identifyer;
-		memcpy(&identifyer, serverMessage, sizeof(uint8_t));
-
-		serverMessage += sizeof(uint8_t);
-
-		switch (identifyer)
-		{
-		case SV_MSG:
-		{
-			uint32_t messageLength;
-
-			memcpy(&messageLength, serverMessage, sizeof(uint32_t));
-			messageLength = ntohl(messageLength);
-			serverMessage += sizeof(uint32_t);
-
-			char* message = (char*) malloc(messageLength * sizeof(char));
-			memcpy(message, serverMessage, messageLength);
-
-			printf("#server#: %s \n", message);
-			free(message);
-			break;
-		}
-		case SV_AMSG:
-		{
-			uint16_t userNameLength;
-			uint32_t messageLength;
-			char* userName;
-			char* message;
-
-			memcpy(&userNameLength, serverMessage, sizeof(uint16_t));
-			serverMessage += sizeof(uint16_t);
-			userNameLength = ntohs(userNameLength);
-			printf("userNameLength: %u\n", userNameLength);
-			userName = (char*) malloc(userNameLength * sizeof(char));
-
-			memcpy(userName, serverMessage, userNameLength * sizeof(char));
-			serverMessage += userNameLength * sizeof(char);
-
-			memcpy(&messageLength, serverMessage, sizeof(uint32_t));
-			messageLength = ntohl(messageLength);
-			serverMessage += sizeof(uint32_t);
-			message = (char*) malloc(messageLength * sizeof(char));
-
-			memcpy(message, serverMessage, messageLength * sizeof(char));
-
-			printf("<%s>: %s", userName, message);
-			free(userName);
-			free(message);
-			break;
-		}
-		case SV_PING_REQ:
-		{
-			char* pingBuffer = malloc(sizeof(char));
-			uint8_t pingRep = 10;
-			memcpy(pingBuffer, &pingRep, sizeof(uint8_t));
-			int size = sendto(fd, pingBuffer, 1, 0, (struct sockaddr*) &server,
-					sizeof(struct sockaddr_in));
 			if (size == -1)
-				printf("Error occured at Pingreply!\n");
+			{
+				printf("Error at receiving!\n");
+				exit(1);
+			}
 			if (size == 0)
-				printf("No Sings were send to Pingreply!\n");
-			break;
+			{
+				printf("No signs received!\n");
+			}
+
+			uint8_t identifyer;
+			memcpy(&identifyer, serverMessage, sizeof(uint8_t));
+
+			serverMessage += sizeof(uint8_t);
+
+			switch (identifyer)
+			{
+			case SV_MSG:
+			{
+				uint32_t messageLength;
+
+				memcpy(&messageLength, serverMessage, sizeof(uint32_t));
+				messageLength = ntohl(messageLength);
+				serverMessage += sizeof(uint32_t);
+
+				char* message = (char*) malloc(messageLength * sizeof(char));
+				memcpy(message, serverMessage, messageLength);
+
+				printf("#server#: %s \n", message);
+				free(message);
+				break;
+			}
+			case SV_AMSG:
+			{
+				uint16_t userNameLength;
+				uint32_t messageLength;
+				char* userName;
+				char* message;
+
+				memcpy(&userNameLength, serverMessage, sizeof(uint16_t));
+				serverMessage += sizeof(uint16_t);
+				userNameLength = ntohs(userNameLength);
+				userName = (char*) malloc(userNameLength * sizeof(char));
+
+				memcpy(userName, serverMessage, userNameLength * sizeof(char));
+				serverMessage += userNameLength * sizeof(char);
+
+				memcpy(&messageLength, serverMessage, sizeof(uint32_t));
+				messageLength = ntohl(messageLength);
+				serverMessage += sizeof(uint32_t);
+				message = (char*) malloc(messageLength * sizeof(char));
+
+				memcpy(message, serverMessage, messageLength * sizeof(char));
+
+				printf("<%s>: %s\n", userName, message);
+				free(userName);
+				free(message);
+				break;
+			}
+			case SV_DISC_AMSG:
+			{
+				uint16_t userNameLength;
+
+				//print name of newly connected user
+				memcpy(&userNameLength, serverMessage, sizeof(uint16_t));
+				userNameLength = ntohs(userNameLength);
+				serverMessage += sizeof(uint16_t);
+
+				char* newUser = (char*) malloc(userNameLength * sizeof(char));
+
+				memcpy(newUser, serverMessage, userNameLength);
+				printf("%s has disconnected from Chat.\n", newUser);
+				free(newUser);
+				break;
+			}
+			case SV_CON_AMSG:
+			{
+				uint16_t userNameLength;
+
+				//print name of newly connected user
+				memcpy(&userNameLength, serverMessage, sizeof(uint16_t));
+				userNameLength = ntohs(userNameLength);
+				serverMessage += sizeof(uint16_t);
+
+				char* newUser = (char*) malloc(userNameLength * sizeof(char));
+
+				memcpy(newUser, serverMessage, userNameLength);
+				printf("%s has entered the Chat.\n", newUser);
+				free(newUser);
+				break;
+			}
+			case SV_PING_REQ:
+			{
+				char* pingBuffer = malloc(sizeof(char));
+				uint8_t pingRep = 10;
+				memcpy(pingBuffer, &pingRep, sizeof(uint8_t));
+				int size = sendto(fd, pingBuffer, 1, 0,
+						(struct sockaddr*) &server, sizeof(struct sockaddr_in));
+				if (size == -1)
+					printf("Error occured at Pingreply!\n");
+				if (size == 0)
+					printf("No Sings were send to Pingreply!\n");
+				break;
+			}
+			}
 		}
+		if (FD_ISSET(0, &fds))
+		{
+			char* userInput = (char*) malloc(1019 * sizeof(char));
+			uint32_t msglen = readline(0, userInput, 1019);
+			uint8_t clmsg = 0x04;
+			if (strncmp(userInput, "/disconnect", 11) == 0)
+			{
+				int i = 0;
+				for(i=0; i<3; i++)
+				{
+				uint8_t cldiscid = 6;
+				char* cldisc = malloc(sizeof(char));
+				memcpy(cldisc, &cldiscid, sizeof(uint8_t));
+				int sentchars = sendto(fd, cldisc, sizeof(char), 0,
+						(struct sockaddr*) &server, sizeof(struct sockaddr_in));
+				if (sentchars <= 0)
+					printf("Error at Disconnect");
+				char* discmsgbuff = malloc(sizeof(char));
+				if(recvfrom(fd, discmsgbuff, sizeof(char), 0, (struct sockaddr*) &server, &ssLength) == -1)
+				{
+					printf("Didn't got disconnecting reply... retrying\n");
+					sleep(5);
+					continue;
+				}
+				else
+				{
+					if(discmsgbuff[0] == SV_DISC_REP)
+					{
+						printf("Shutting down correctly\n");
+						close(fd);
+						exit(1);
+					}
+				}
+				}
+			}
+			else
+			{
+				char* userMessage = (char*) malloc(
+						sizeof(uint8_t) + sizeof(uint32_t)
+								+ (msglen - 1) * sizeof(char));
+				sleep(1);
+				uint32_t imsglen = htonl(msglen - 1);
+
+				memcpy(userMessage, &clmsg, sizeof(uint8_t));
+				memcpy(userMessage + sizeof(uint8_t), &imsglen,
+						sizeof(uint32_t));
+				memcpy(userMessage + sizeof(uint8_t) + sizeof(uint32_t),
+						userInput, (msglen - 1) * sizeof(char));
+
+				characters = sendto(fd, userMessage,
+						sizeof(uint8_t) + sizeof(uint32_t)
+								+ (msglen - 1) * sizeof(char), 0,
+						(struct sockaddr*) &server, sizeof(struct sockaddr_in));
+			}
 		}
 	}
+
 	return 1;
 }
