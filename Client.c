@@ -39,7 +39,7 @@ void checkInput(char* ip, char* port, char* name)
 	}
 
 	//checks if port is in between the valid values
-	if (1024 > atoi(port) && atoi(port) < 65535)
+	if (atoi(port) < 1024 || atoi(port) >= 65535)
 	{
 		printf("Invalid Port! Has to be in between 1024 and 65535 \n");
 		check = 0;
@@ -145,6 +145,7 @@ int main(int argc, char** argv)
 					uint16_t port;
 					memcpy(&port, buffer + 2, sizeof(uint16_t));
 					server.sin_port = port;
+					printf("Verbindung unter Port %d hergestellt!\n",htons(port));
 					break;
 				}
 				else

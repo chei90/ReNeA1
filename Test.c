@@ -34,4 +34,5 @@ int main()
 	deletePlayer("Christoph");
 
 	printf("First User: %s, User Count %i\n",firstEntry->userName, userCount);
+	printf("Port vorhanden : %d", checkForPort(4444));
 }

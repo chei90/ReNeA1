@@ -34,6 +34,12 @@ uList* firstEntry;
 
 static int userCount = 0;
 
+struct sockaddr_in server;
+socklen_t ssLength;
+
+int fd;
+
+
 void addNewPlayer(char*, int);
 int checkForPlayer(char*);
 void initializeList();
