@@ -30,4 +30,7 @@
 	pthread_t listener;
 	fd_set fds;
 
+	void printUsage();
+	void checkInput();
+
 #endif

@@ -13,11 +13,11 @@
 void printUsage()
 {
 	printf(
-			"Usage: \n \
-			./udp_chat_client -s <serv_addr> -p <serv_port> -u <user> \n \
-			<serv_addr>: Ip of the Chat-Server you wish to connect to \n \
-			<serv_port>: Port of the Chat-Server \n \
-			<user>: Your User-Name \n");
+			"\nUsage: \n\n"
+			"./udp_chat_client -s <serv_addr> -p <serv_port> -u <user> \n"
+			"<serv_addr>: Ip of the Chat-Server you wish to connect to \n"
+			"<serv_port>: Port of the Chat-Server \n"
+			"<user>: Your User-Name \n\n");
 	exit(1);
 }
 
@@ -87,6 +87,9 @@ int main(int argc, char** argv)
 		case 'u':
 			userName = optarg;
 			break;
+		default:
+			printUsage();
+			exit(1);
 		}
 	}
 
@@ -291,31 +294,33 @@ int main(int argc, char** argv)
 			if (strncmp(userInput, "/disconnect", 11) == 0)
 			{
 				int i = 0;
-				for(i=0; i<3; i++)
+				for (i = 0; i < 3; i++)
 				{
-				uint8_t cldiscid = 6;
-				char* cldisc = malloc(sizeof(char));
-				memcpy(cldisc, &cldiscid, sizeof(uint8_t));
-				int sentchars = sendto(fd, cldisc, sizeof(char), 0,
-						(struct sockaddr*) &server, sizeof(struct sockaddr_in));
-				if (sentchars <= 0)
-					printf("Error at Disconnect");
-				char* discmsgbuff = malloc(sizeof(char));
-				if(recvfrom(fd, discmsgbuff, sizeof(char), 0, (struct sockaddr*) &server, &ssLength) == -1)
-				{
-					printf("Didn't got disconnecting reply... retrying\n");
-					sleep(5);
-					continue;
-				}
-				else
-				{
-					if(discmsgbuff[0] == SV_DISC_REP)
+					uint8_t cldiscid = 6;
+					char* cldisc = malloc(sizeof(char));
+					memcpy(cldisc, &cldiscid, sizeof(uint8_t));
+					int sentchars = sendto(fd, cldisc, sizeof(char), 0,
+							(struct sockaddr*) &server,
+							sizeof(struct sockaddr_in));
+					if (sentchars <= 0)
+						printf("Error at Disconnect");
+					char* discmsgbuff = malloc(sizeof(char));
+					if (recvfrom(fd, discmsgbuff, sizeof(char), 0,
+							(struct sockaddr*) &server, &ssLength) == -1)
 					{
-						printf("Shutting down correctly\n");
-						close(fd);
-						exit(1);
+						printf("Didn't got disconnecting reply... retrying\n");
+						sleep(5);
+						continue;
 					}
-				}
+					else
+					{
+						if (discmsgbuff[0] == SV_DISC_REP)
+						{
+							printf("Shutting down correctly\n");
+							close(fd);
+							exit(1);
+						}
+					}
 				}
 			}
 			else
@@ -323,7 +328,6 @@ int main(int argc, char** argv)
 				char* userMessage = (char*) malloc(
 						sizeof(uint8_t) + sizeof(uint32_t)
 								+ (msglen - 1) * sizeof(char));
-				sleep(1);
 				uint32_t imsglen = htonl(msglen - 1);
 
 				memcpy(userMessage, &clmsg, sizeof(uint8_t));
