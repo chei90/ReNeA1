@@ -26,18 +26,21 @@
 typedef struct user
 {
 	char* userName;
-	int port;
+	struct sockaddr_in* cSocket;
+	int sockFD;
 	struct user* next;
 	struct user* previous;
 } uList;
 uList* firstEntry;
 
 static int userCount = 0;
+static int maxFD;
 
 struct sockaddr_in server;
-socklen_t ssLength;
+struct sockaddr_in client;
+socklen_t clientLength;
 
-int fd;
+int fd, cfd;
 
 
 void addNewPlayer(char*, int);

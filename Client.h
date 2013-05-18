@@ -23,6 +23,7 @@
 #include<errno.h>
 #include<sys/select.h>
 #include<sys/time.h>
+#include<fcntl.h>
 
 	struct sockaddr_in server;
 	int fd;
