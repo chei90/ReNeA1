@@ -1,292 +1,425 @@
-/*
- * Server.c
- *
- *  Created on: 16.05.2013
- *      Author: christoph
- */
-
 #include"Server.h"
 
-void addNewUser(char* uName, int port)
+/**
+ * @brief Prints usage Message to Console
+ */
+void usage(void)
 {
-	uList* tmp;
-
-	tmp = firstEntry;
-	if (!userCount)
-	{
-		firstEntry->userName = uName;
-
-		printf("First User\n");
-		firstEntry->cSocket = malloc(sizeof(struct sockaddr_in));
-//		*(firstEntry->cSocket) = client;
-		firstEntry->cSocket->sin_port = htons(port);
-		firstEntry->cSocket->sin_addr.s_addr = inet_addr("127.0.0.1");
-		firstEntry->cSocket->sin_family=AF_INET;
-//		firstEntry->sockFD = socket(AF_INET, SOCK_DGRAM, 0);
-//		if(firstEntry->sockFD < 0) printf("Error at creating socket of User %s\n",firstEntry->userName);
-//		if(bind(firstEntry->sockFD, (struct sockaddr*) &firstEntry->cSocket, sizeof(struct sockaddr_in))<0)
-//			printf("Error on binding socket");
-	}
-	else
-	{
-		int i;
-		for (i = 0; i < userCount - 1; ++i)
-		{
-			tmp = tmp->next;
-		}
-
-		uList* insert = malloc(sizeof(uList));
-
-		insert->userName = uName;
-		insert->cSocket = malloc(sizeof(struct sockaddr_in));
-//		*(firstEntry->cSocket) = client;
-		insert->cSocket->sin_port = htons(port);
-		insert->cSocket->sin_addr.s_addr = inet_addr("127.0.0.1");
-		insert->cSocket->sin_family=AF_INET;
-//		insert->sockFD = socket(AF_INET, SOCK_DGRAM, 0);
-//		if(insert->sockFD < 0) printf("Error at creating socket of User %s\n",insert->userName);
-//		if(bind(insert->sockFD, (struct sockaddr*) &insert->cSocket, sizeof(struct sockaddr_in))<0)
-//			printf("Error on binding socket");
-
-		tmp->next = insert;
-		insert->previous = tmp;
-	}
-	userCount++;
+	printf("Usage:\n");
+	printf("/udp_chat_server -p <serv_port>\n");
+	printf(
+			"<serv_port>: The Port you want to use. Must be in betweeen 1024 and 65535\n");
 }
-
-int checkForPlayer(char* uName)
+/**
+ * Routine for user thread.
+ */
+void thread_routine(void* args)
 {
-	uList* tmp = firstEntry;
-	int i;
+	//give some time to send connection reply
+	sleep(1);
+	int running = 1;
+	uList* user = (uList*) args;
+	char clientMessage[256];
+	socklen_t slen = sizeof(user->clientAdress);
+	uint8_t ping;
+	int pingcnt = 0;
 
-	for (i = 0; i < userCount; i++)
+	uint8_t* svMsg, discRep;
+	uint16_t namelen, namelenN;
+	uint32_t msglen, msglenN;
+	uList* n;
+
+	//printf("Starting thread of <%s>.\n", user->name);
+
+	fd_set fds;
+	struct timeval timeout;
+
+	while (running)
 	{
-		if (!strcmp(tmp->userName, uName))
+		timeout.tv_sec = 5;
+		timeout.tv_usec = 0;
+		FD_ZERO(&fds);
+		FD_SET(user->clientFD, &fds);
+		FD_SET(0, &fds);
+		if (select((user->clientFD) + 1, &fds, 0, 0, &timeout) < 0)
+			printf("Error in select in thread of <%s>.\n", user->userName);
+
+		if (FD_ISSET(user->clientFD, &fds))
 		{
-			return 1;
-		}
-		else
-			tmp = tmp->next;
-	}
-	return 0;
-}
-int checkForPort(int uPort)
-{
-	printf("Step1\n");
-	uList* tmp = firstEntry;
-	int i;
+			if (recvfrom(user->clientFD, clientMessage, sizeof(clientMessage), 0,
+					(struct sockaddr*) &(user->clientAdress), &slen) == -1)
+				printf("Error receiving message from %s.\n", user->userName);
 
-	printf("Step1\n");
-	for (i = 0; i < userCount; i++)
-	{
-		if (uPort == ntohs(tmp->cSocket->sin_port))
-		{
-			return 1;
-		}
-		else
-			tmp = tmp->next;
-	}
-	return 0;
-}
-int returnPort()
-{
-	printf("Step2\n");
-	int i = portMin;
-	while (checkForPort(i))
-	{
-		printf("I: %d\n", i);
-		i++;
-	}
-	printf("I: %d\n", i);
-	return i;
-}
-int deletePlayer(char* uName)
-{
-	uList* tmp = firstEntry;
-	int i;
 
-	for (i = 0; i < userCount; i++)
-	{
-		if (!strcmp(tmp->userName, uName))
-		{
-			if (i == (userCount - 1))
+			switch (clientMessage[0])
 			{
-				printf("Last User deleted\n");
-				uList* prev = malloc(sizeof(uList));
-				prev = tmp->previous;
-				prev->next = NULL;
-				free(tmp);
-				userCount--;
+			// receive CL_MSG
+			case CL_MSG:
+				// send SV_AMSG
+				namelen = (uint16_t) strlen(user->userName);
+				namelenN = htons(namelen);
+				memcpy(&msglenN, clientMessage + 1, sizeof(msglenN));
+				msglen = ntohl(msglenN);
+				svMsg = malloc(
+						(1 + 2 + namelen + 4 + msglen) * sizeof(uint8_t));
+				*svMsg = 0x05;
+				memcpy(svMsg + 1, &namelenN, sizeof(namelenN));
+				memcpy(svMsg + 1 + 2, user->userName, namelen * sizeof(char));
+				memcpy(svMsg + 1 + 2 + namelen, &msglenN, sizeof(msglenN));
+				memcpy(svMsg + 1 + 2 + namelen + 4,
+						clientMessage + 1 + 2 + sizeof(namelen),
+						msglen * sizeof(uint8_t));
+				for (n = firstEntry; n != NULL; n = n->next)
+				{
+					if (sendto(n->clientFD, svMsg, 1 + 2 + namelen + 4 + msglen,
+							0, (struct sockaddr *) &(n->clientAdress),
+							sizeof(n->clientAdress)) == -1)
+						printf(
+								"Error sending user message from <%s> to <%s>.\n",
+								user->userName, n->userName);
+				}
+				free(svMsg);
+				break;
+				// receive CL_DISC_REQ
+			case CL_DISC_REQ:
+				// send SV_DISC_REP
+				discRep = 0x07;
+				if (sendto(user->clientFD, &discRep, sizeof(discRep), 0,
+						(struct sockaddr *) &(user->clientAdress),
+						sizeof(user->clientAdress)) == -1)
+					printf("Error sending disconnec reply to <%s>.\n",
+							user->userName);
+				running--;
+				break;
+				// receive CL_PING_REP
+			case CL_PING_REP:
+				pingcnt = 0;
+				break;
+			default:
+				printf("Incoming message with unknown ID %d from <%s>.\n",
+						*clientMessage, user->userName);
+				break;
 			}
-			else if (i == 0)
+		}
+		else
+		{
+			++pingcnt;
+			if (pingcnt > 1)
+				printf("Unanswered ping (%d/3) from <%s>.\n", pingcnt - 1,
+						user->userName);
+			if (pingcnt > 3)
 			{
-				printf("I=0\n");
-				if (userCount == 1)
-				{
-					printf("Letzter User\n");
-					free(firstEntry);
-				}
-				else
-				{
-					printf("Erster User wird gelöscht!\n");
-					firstEntry = tmp->next;
-					free(tmp);
-				}
-				userCount--;
+				running--;
+				printf("Lost connection to <%s>. Timeout.\n", user->userName);
 			}
 			else
 			{
-				uList* prev = malloc(sizeof(uList));
-				uList* next = malloc(sizeof(uList));
-
-				printf("In the Middle\n");
-				userCount--;
-				prev = tmp->previous;
-				next = tmp->next;
-
-				prev->next = next;
-				next->previous = prev;
-
-				free(tmp);
+				// send SV_PING_REQ
+				ping = 0x09;
+				if (sendto(user->clientFD, &ping, sizeof(ping), 0,
+						(struct sockaddr*) &(user->clientAdress),
+						sizeof(user->clientAdress)) == -1)
+					printf("Error sending ping to <%s>", user->userName);
 			}
 		}
-		else
-			tmp = tmp->next;
+	}
+	//printf("Killing thread of <%s>.\n", user->name);
+	printf("<%s> left the server.\n", user->userName);
+	deleteUser((uList*) args);
+	pthread_exit(NULL);
+}
+
+/**
+ * @brief checks whether username is allreade used or noth
+ * @return 1 if users in list
+ * @return 0 if not
+ */
+int checkForUser(char* name)
+{
+	uList* user;
+	for (user = firstEntry; user != NULL; user = user->next)
+	{
+		if (!strcmp(user->userName, name))
+			return 1;
 	}
 	return 0;
 }
 
-void printUsage()
+/**
+ *  Add new user: create data, socket and thread.
+ *  @return 0 on success
+ */
+int addUser(char* buffer, struct sockaddr_in address, uint16_t port,
+		int serverfd)
 {
-	printf("\nUsage: \n\n"
-			"./udp_server -p <port>\n"
-			" -p: The Port you want to use\n\n");
-}
 
-int checkPort(char* serverPort)
-{
-	if (atoi(serverPort) <= 1024 || atoi(serverPort) > 65535)
+	struct sockaddr_in newClientSocket;
+	newClientSocket.sin_family = AF_INET;
+	newClientSocket.sin_port = htons(port);
+	newClientSocket.sin_addr.s_addr = INADDR_ANY;
+	socklen_t slen = sizeof(struct sockaddr_in);
+
+	uint16_t userNameLength;
+	memcpy(&userNameLength, buffer + sizeof(uint8_t), sizeof(uint16_t));
+	userNameLength = ntohs(userNameLength);
+
+	char* newUsersName = malloc(sizeof(char) * (userNameLength));
+	memcpy(newUsersName, buffer + sizeof(uint8_t) + sizeof(uint16_t),
+			userNameLength * sizeof(char));
+
+	char* newUsersNameCopy = malloc(sizeof(char) * (userNameLength));
+	memcpy(newUsersNameCopy, newUsersName, sizeof(char) * userNameLength);
+
+	//socket fd
+	int newClientFd = socket(AF_INET, SOCK_DGRAM, 0);
+	if (bind(newClientFd, (struct sockaddr *) &newClientSocket,
+			sizeof(newClientSocket)) == -1)
+		printf("Error on bind.");
+
+	uList* user = malloc(sizeof(uList));
+	user->userName = newUsersNameCopy;
+	user->clientAdress = address;
+	user->clientFD = newClientFd;
+
+	char* svMsg = malloc(sizeof(char) * 4);
+	//List is Empty
+	if (lastEntry == NULL)
 	{
-		return 0;
+		firstEntry = lastEntry = user;
+		if (pthread_create(&(user->thread), NULL, (void*) &thread_routine, user)
+				!= 0)
+		{
+			printf("Error creating user thread.\n");
+			exit(1);
+		}
+
+		svMsg[0] = SV_CON_REP;
+		//We have to accept the first USer
+		svMsg[1] = 0x00;
+		if (sendto(serverfd, svMsg, 2, 0, (struct sockaddr *) &address,
+				sizeof(address)) == -1)
+			printf("Error sending connection reply to client.\n");
+
+		printf("<%s> joined the server.\n", newUsersName);
 	}
-	return 1;
+
+	/*
+	 * List is not empty so we have to check if the username is already used
+	 * then add him and inform the other
+	 */
+	else
+	{
+		//check if user name already exists
+		if (checkForUser(newUsersName))
+		{
+			printf("Connection request of <%s> declined.\n", newUsersName);
+			svMsg[0] = SV_CON_REP;
+			svMsg[1] = 0x01;
+			if (sendto(serverfd, svMsg, 2, 0, (struct sockaddr *) &address,
+					sizeof(address)) == -1)
+				printf("Error sending connection reply to client.\n");
+			free(newUsersNameCopy);
+		}
+		//User doesnt exist so we can save him
+		else
+		{
+			lastEntry->next = user;
+			user->previous = lastEntry;
+			lastEntry = user;
+			if (pthread_create(&(user->thread), NULL, (void*) &thread_routine,
+					user) != 0)
+			{
+				printf("Error creating user thread.\i");
+				return -1;
+			}
+
+			svMsg[0] = SV_CON_REP;
+			svMsg[1] = 0x00;
+
+			memcpy(svMsg + 2, &(newClientSocket.sin_port), sizeof(uint16_t));
+			if (sendto(serverfd, svMsg, sizeof(svMsg), 0,
+					(struct sockaddr *) &address, sizeof(address)) == -1)
+				printf("Error sending connection reply to client.\i");
+
+			printf("<%s> joined the server.\n", newUsersName);
+			uint16_t nameLengthToNetwork = htons(userNameLength);
+			char* svMsgToAll = malloc(
+					sizeof(uint8_t) + sizeof(uint16_t)
+							+ userNameLength * sizeof(char));
+			svMsgToAll[0] = SV_CON_AMSG;
+			memcpy(svMsgToAll + sizeof(uint8_t), &nameLengthToNetwork,
+					sizeof(uint16_t));
+			memcpy(svMsgToAll + sizeof(uint8_t) + sizeof(uint16_t),
+					newUsersName, userNameLength*sizeof(char));
+
+			//Introduce the newly joined User to everybody else
+			uList* i;
+			for (i = firstEntry; i != NULL; i = i->next)
+			{
+				if (sendto(i->clientFD, svMsgToAll, 3 + userNameLength, 0,
+						(struct sockaddr *) &(i->clientAdress),
+						sizeof(i->clientAdress)) == -1)
+					printf("Error sending new-user-svMsgToAll to %s.\n", i->userName);
+			}
+			free(svMsgToAll);
+		}
+	}
+	free(newUsersName);
+	return 0;
 }
 
+/**
+ * @brief deletes the specified user struct out of list, cancels all connections, and sends msg
+ * @param user - the user you wand to delete
+ */
+void deleteUser(uList* user)
+{
+	uint16_t userNameLength = strlen(user->userName);
+	char* svMsg = malloc(
+			(sizeof(uint8_t) + sizeof(uint16_t) + userNameLength)
+					* sizeof(uint8_t));
+
+	userNameLength = htons(userNameLength);
+
+	svMsg[0] = (uint8_t) 8;
+
+	memcpy(svMsg + 1, &userNameLength, sizeof(uint16_t));
+	memcpy(svMsg + 1 + 2, user->userName, ntohs(userNameLength));
+
+	uList* i;
+	for (i = firstEntry; i != NULL; i = i->next)
+	{
+		if (sendto(i->clientFD, svMsg, 1 + 2 + ntohs(userNameLength), 0,
+				(struct sockaddr *) &(i->clientAdress), sizeof(i->clientAdress))
+				< 0)
+			printf("Error sending disconnecting message from <%s> to <%s>.\n",
+					user->userName, i->userName);
+
+	}
+
+	uList* next = user->next;
+	uList* previous = user->previous;
+
+	// User is in the middle of the list
+	if (next != NULL && previous != NULL)
+	{
+		previous->next = next;
+		next->previous = previous;
+	}
+
+	// User has no predecessor, therefore -> first element
+	if (next != NULL && previous == NULL)
+	{
+		next->previous = NULL;
+		firstEntry = next;
+	}
+
+	// User has no successor, therefore -> last element
+	if (next == NULL && previous != NULL)
+	{
+		previous->next = NULL;
+		lastEntry = previous;
+	}
+
+	// User has neither successor nor precedessor, therefore -> list is
+	// empty after deletion
+	if (next == NULL && previous == NULL)
+	{
+		firstEntry = NULL;
+		lastEntry = NULL;
+	}
+
+	// free Buffer
+	free(user->userName);
+	free(svMsg);
+	free(user);
+
+	close(user->clientFD);
+	pthread_detach(user->thread);
+}
+
+
+
+int checkPort(char* port)
+{
+	int tmp = atoi(port);
+
+	if (tmp < 1024 || tmp > 65535)
+	{
+		usage();
+		exit(1);
+	}
+	return tmp;
+}
+/**
+ * main
+ */
 int main(int argc, char** argv)
 {
-	if (argc != 3)
-		printUsage();
+	firstEntry = lastEntry = NULL;
 
-	firstEntry = malloc(sizeof(uList));
+	if (argc != 3)
+	{
+		usage();
+		exit(1);
+	}
 
 	int opt;
-	char* serverPort;
-
 	while ((opt = getopt(argc, argv, "p:")) != -1)
 	{
 		switch (opt)
 		{
 		case 'p':
-			serverPort = optarg;
+			serverPort = checkPort(optarg);
 			break;
-
 		default:
-			printUsage();
+			usage();
 			exit(1);
-			break;
 		}
 	}
 
-	if (checkPort(serverPort))
-	{
-		server.sin_port = htons(atoi(serverPort));
-	}
-	else
-	{
-		printf("Invalid Port! Has to be in between 1025 and 65535\n");
-		exit(1);
-	}
+	uint16_t currentPort = serverPort + 1;
+	fd_set fds;
+	clientLength = sizeof(client);
+	char* clientMessage = (char*) malloc(256 * sizeof(char));
+
+	if ((fd = socket(AF_INET, SOCK_DGRAM, 0)) == -1)
+		printf("Error creating socket.\n");
 
 	server.sin_family = AF_INET;
-	inet_aton("127.0.0.1", &server.sin_addr);
-	fd = socket(AF_INET, SOCK_DGRAM, 0);
-	if (fd < 0)
-	{
-		printf("Fehler bei Socketerstellung\n");
-		exit(1);
-	}
+	server.sin_port = htons(serverPort);
+	server.sin_addr.s_addr = htonl(INADDR_ANY);
 
-	if (bind(fd, (struct sockaddr*) &server, sizeof(struct sockaddr_in)) < 0)
-	{
-		printf("Fehler beim Binding");
-		exit(1);
-	}
+	if (bind(fd, (struct sockaddr*) &server, sizeof(server)) == -1)
+		printf("Error binding socket.\n");
+	else
+		printf("Server set up and ready to use.\n");
 
-	cfd = socket(AF_INET, SOCK_DGRAM, 0);
-	bind(fd, (struct sockaddr*) &client, sizeof(struct sockaddr_in));
-
-	char* clMsg = malloc(64 * sizeof(char));
-	char* ipAdress = inet_ntoa(server.sin_addr);
-	printf("ServerAdress is: %s\n", ipAdress);
-
+	// main loop for receiving new user requests.
 	while (1)
 	{
-		if (recvfrom(fd, clMsg, 64 * sizeof(char), 0,
-				(struct sockaddr*) &client, &clientLength) == -1)
+		FD_ZERO(&fds);
+		FD_SET(fd, &fds);
+
+		if (select(fd + 1, &fds, 0, 0, 0) < 0)
+			printf("Error in select.\n");
+
+		if (FD_ISSET(fd, &fds))
 		{
-			printf("Error occured while receiving new connector\n");
-			exit(1);
-		}
-		else
-		{
-			if (clMsg[0] == CL_CON_REQ)
+			if (recvfrom(fd, clientMessage, sizeof(clientMessage), 0,
+					(struct sockaddr*) &client, &clientLength) == -1)
+				printf("Error receiving message from new user.\n");
+			else
 			{
-
-				uint16_t userNameLength;
-				memcpy(&userNameLength, clMsg + sizeof(uint8_t),
-						sizeof(uint16_t));
-				userNameLength = ntohs(userNameLength);
-				char* userName = (char*) malloc(sizeof(char) * userNameLength);
-
-				memcpy(userName, clMsg + sizeof(uint8_t) + sizeof(uint16_t),
-						sizeof(char) * userNameLength);
-				int userPort = returnPort();
-				printf("%s connected\n", userName);
-				if (checkForPlayer(userName))
+				//receive CL_CON_REQ
+				if (clientMessage[0] == CL_CON_REQ)
 				{
-					char* svMsg = malloc(sizeof(char) * 2);
-					svMsg[0] = 0x02;
-					svMsg[1] = 0x01;
-					printf("User rejected!\n");
-
-					sendto(fd, svMsg, 2 * sizeof(char), 0,(struct sockaddr*) &client,sizeof(struct sockaddr_in));
-//					{
-//						printf("Error at sending");
-//					}
-				}
-				else
-				{
-					addNewUser("chr", userPort);
-
-//					char* svMsg = malloc(sizeof(char)*4);
-//					svMsg[0] = 0x02;
-//					svMsg[1] = 0x00;
-//					uint16_t tmpUPort = htons(userPort);
-//					memcpy(svMsg+sizeof(uint8_t)+sizeof(uint8_t), &tmpUPort, sizeof(uint16_t));
-//					int test;
-//					errno = 0;
-//					if ((test=sendto(fd, svMsg, 4 * sizeof(char), 0,
-//							(struct sockaddr*) &client,
-//							sizeof(struct sockaddr_in))) < 0)
-//					{
-//						printf("Error at sending\n");
-//					}
-//					printf("Test: %d\n", test);
-//					printf("Error MEssage: $s\n", strerror(errno));
+					addUser(clientMessage, client, currentPort, fd);
+					if (currentPort++ == 65535)
+						currentPort = 1025;
 				}
 			}
 		}
 	}
-
-	return 1;
+	return 0;
 }

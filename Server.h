@@ -19,6 +19,8 @@
 #include<arpa/inet.h>
 #include"Identifyers.h"
 #include<errno.h>
+#include<sys/select.h>
+#include<sys/time.h>
 
 #define portMin 1025
 #define portMax 65535
@@ -26,26 +28,23 @@
 typedef struct user
 {
 	char* userName;
-	struct sockaddr_in* cSocket;
-	int sockFD;
+	int clientFD;
+	uint16_t port;
+	struct sockaddr_in clientAdress;
 	struct user* next;
 	struct user* previous;
+	pthread_t thread;
 } uList;
 uList* firstEntry;
+uList* lastEntry;
 
-static int userCount = 0;
 static int maxFD;
 
 struct sockaddr_in server;
 struct sockaddr_in client;
 socklen_t clientLength;
 
-int fd, cfd;
-
-
-void addNewPlayer(char*, int);
-int checkForPlayer(char*);
-void initializeList();
-int deletePlayer(char*);
+int fd, cfd, serverPort;
+fd_set fds;
 
 #endif

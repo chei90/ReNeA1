@@ -39,7 +39,7 @@ void checkInput(char* ip, char* port, char* name)
 	}
 
 	//checks if port is in between the valid values
-	if (atoi(port) < 1024 || atoi(port) >= 65535)
+	if (1024 > atoi(port) && atoi(port) < 65535)
 	{
 		printf("Invalid Port! Has to be in between 1024 and 65535 \n");
 		check = 0;
@@ -115,10 +115,6 @@ int main(int argc, char** argv)
 
 	int tries, characters;
 
-	int flags = fcntl(fd, F_GETFL,0);
-	flags |= O_NONBLOCK;
-	fcntl(fd, F_SETFL, O_NONBLOCK);
-
 	for (tries = 0; tries <= 3; tries++)
 	{
 		characters = sendto(fd, clientMessage,
@@ -136,11 +132,11 @@ int main(int argc, char** argv)
 			char* buffer = (char*) malloc(128);
 			characters = recvfrom(fd, buffer, 128, 0,
 					(struct sockaddr*) &server, &ssLength);
-			printf("Characters %d\n", characters);
+
 			if (characters <= 0)
 			{
 				printf("Server didn't answer... retrying.\n");
-				sleep(5);
+				continue;
 			}
 			else if (buffer[0] == SV_CON_REP)
 			{
@@ -149,7 +145,6 @@ int main(int argc, char** argv)
 					uint16_t port;
 					memcpy(&port, buffer + 2, sizeof(uint16_t));
 					server.sin_port = port;
-					printf("Verbindung unter Port %d hergestellt!\n",htons(port));
 					break;
 				}
 				else
@@ -162,9 +157,6 @@ int main(int argc, char** argv)
 		}
 	}
 
-	flags = fcntl(fd, F_GETFL,0);
-	flags |= O_NONBLOCK;
-	fcntl(fd, F_SETFL, flags);
 	struct timeval timeout;
 
 	printf("Connected Successfully...\n");
